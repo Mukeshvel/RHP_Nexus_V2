@@ -1,28 +1,29 @@
 # RHP Nexus
 
-RHP Nexus is a live, read-only dashboard for the two Google Sheets supplied for this project. It reads the Skillrack consolidated roster and the first mock interview tab on the server, joins interview records by registration number, and refreshes the browser view every two minutes. The **Third sheet completion** column is intentionally blank as requested.
+RHP Nexus is a responsive, read-only dashboard for the **CONSOLIDATED** tab in the supplied Skillrack workbook. It reads the roster fields directly from Google Sheets through a server route and refreshes the browser every two minutes. It includes cohort totals, branch comparisons, a top solved-count list, searchable and sortable student rows, a student detail drawer, and CSV export.
 
 ## Run locally
 
 Requirements: Node.js 20 or newer and npm.
 
-```bash
+```powershell
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000. Use **Refresh now** to request the latest values immediately. The dashboard does not write back to either sheet and does not show interview recording links or contact numbers. It does not fall back to demo data if a source cannot be read.
+Open http://localhost:3000. Use **Refresh** to request the sheet immediately. The app reads but never writes to the spreadsheet. It uses the source values as reported and does not invent a completion percentage.
 
-## Sheet access
+## Data source
 
-The server downloads CSV exports from the two source workbooks using their current tab IDs. The Google Sheets must allow the server to read them through link access. If a workbook is private, the dashboard will show a source error; use an approved server-side Google Sheets API credential flow rather than making private student data public.
+The spreadsheet link and consolidated-tab ID are configured in `src/lib/config/data-sources.ts`. The link must permit the dashboard server to read a CSV export. If the sheet is private, use an approved server-side Google Sheets API credential flow; do not make private student records public to enable access.
 
-The site displays student names, registration numbers, branches, and learning progress. **Do not deploy this dashboard to a public URL without adding sign-in and server-side access control for the intended coordinators.** Anyone who can reach the dashboard API can otherwise read the student progress values returned by the source sheets.
+The dashboard reads registration number, student name, college, branch, program solved count, yet-to-solve count, and number of days. It omits the source sheet's contact numbers and email addresses. No demo data is substituted if the connection fails.
 
-## Data included
+The roster includes student identifiers and academic progress. Add sign-in and server-side access control before deploying this dashboard to a public URL. The current app has no authentication.
 
-- Skillrack consolidated tab: registration number, student name, college, branch, solved count, remaining count, and reported activity days.
-- Mock interview tab: interview count and latest date, matched to the roster by registration number.
-- Third sheet completion: blank placeholder column.
+## Verify and build
 
-Phone numbers and recording URLs are not returned to the dashboard. No demo records are included.
+```powershell
+npx tsc --noEmit
+npm run build
+```
