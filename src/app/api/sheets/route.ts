@@ -6,6 +6,9 @@ export const revalidate = 0;
 
 type Row = string[];
 function parseCsv(text: string): Row[] {
+  const firstLine = text.split(/\r?\n/).slice(0, 20).sort((a, b) => Math.max(b.split(",").length, b.split(";").length, b.split("\t").length) - Math.max(a.split(",").length, a.split(";").length, a.split("\t").length))[0] ?? "";
+  const counts = [",", ";", "\t"].map(delimiter => ({ delimiter, count: firstLine.split(delimiter).length - 1 }));
+  const delimiter = counts.sort((a, b) => b.count - a.count)[0]?.delimiter ?? ",";
   const rows: Row[] = []; let row: string[] = []; let cell = ""; let quoted = false;
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
@@ -14,7 +17,7 @@ function parseCsv(text: string): Row[] {
       else if (char === '"') quoted = false;
       else cell += char;
     } else if (char === '"') quoted = true;
-    else if (char === ",") { row.push(cell); cell = ""; }
+    else if (char === delimiter) { row.push(cell); cell = ""; }
     else if (char === "\n") { row.push(cell.replace(/\r$/, "")); rows.push(row); row = []; cell = ""; }
     else cell += char;
   }
@@ -35,11 +38,21 @@ export async function GET() {
     const text = await response.text();
     if (text.trimStart().startsWith("<!DOCTYPE html") || text.includes("accounts.google.com")) throw new Error("Google did not provide a CSV export. The consolidated tab must be readable by the dashboard server.");
     const rows = parseCsv(text);
-    const headerIndex = rows.findIndex(row => ["regn num", "registration number"].some(key => row.some(cell => normal(cell).includes(normal(key)))) && row.some(cell => normal(cell).includes("name")) && row.some(cell => normal(cell).includes("solved count")));
-    if (headerIndex < 0) throw new Error("Could not find the registration, name and solved-count columns in the consolidated tab.");
+    const headerIndex = rows.findIndex(row => {
+      const labels = row.map(normal);
+      const hasRegistration = labels.some(label => ["regnnum", "regnum", "registrationnumber", "registrationno"].some(key => label.includes(key)));
+      const hasName = labels.some(label => label === "name" || label.includes("studentname"));
+      const hasSolved = labels.some(label => label.includes("programssolvedcount") || label.includes("solvedcount") || label === "solved");
+      return hasRegistration && hasName && hasSolved;
+    });
+    if (headerIndex < 0) {
+      const likelyHeader = rows.find(row => row.some(cell => /regn|registration/i.test(cell)) && row.some(cell => /name/i.test(cell)));
+      const headerSummary = likelyHeader?.map(cell => cell.trim()).filter(Boolean).slice(0, 16).join(", ");
+      throw new Error(`Could not detect the consolidated header row.${headerSummary ? ` Found these columns: ${headerSummary}.` : " The downloaded sheet format was not recognized."}`);
+    }
     const headers = rows[headerIndex];
     const idx = {
-      id: findColumn(headers, ["Regn Num", "Registration Number"]), name: findColumn(headers, ["Name"]),
+      id: findColumn(headers, ["Regn Num", "Regn No", "Reg No", "Registration Number", "Registration No"]), name: findColumn(headers, ["Name", "Student Name"]),
       college: findColumn(headers, ["College", "Institution"]), branch: findColumn(headers, ["Branch"]),
       solved: findColumn(headers, ["Programs Solved Count", "Solved Count"]),
       remaining: findColumn(headers, ["Yet to solve"]), days: findColumn(headers, ["No.of days", "Number of days"]),
